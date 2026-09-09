@@ -6,7 +6,11 @@
  * this height, and the lazy WebGL island (HeroLogo) derives its no-span
  * fallback for the hero pin range from it. Constants only — no state, so no
  * globalThis pin is required (duplicated module copies stay identical).
+ *
+ * `Backend` is imported as a TYPE ONLY (fully erased at compile time), so the
+ * three-free / DOM-free promise above still holds at runtime.
  */
+import type { Backend } from "@/webgl/renderer/createRenderer";
 
 /**
  * Outer height of the pinned spine section, in vh. 315vh is the 3-group
@@ -64,6 +68,38 @@ export const COMPACT_SPINE_TRAVEL_SVH = COMPACT_SPINE_SVH - 100;
 // gate). Constant only — no state, so the duplicated module copies stay
 // identical (see the header note).
 export const HERO_BRAND_COMPACT = true;
+
+/**
+ * THE single predicate for "will this load play the brand beat?" — the
+ * SERSAN wordmark assemble plus the eclipse that rises behind it.
+ *
+ * It was written inline in CompactSpine (`brandArmed`), and the moment the
+ * preloader learned to stop waiting for a beat that is never coming there
+ * would have been a second copy — a predicate whose FALSE branch is a
+ * 23-second stall does not get to drift between two files. It lives here
+ * instead: beside the kill-switch it AND-s, in the module both the route
+ * bundle and the lazy WebGL host already import.
+ *
+ * NOT the same predicate as Scene.tsx's `homeSingularityLite`, which keys on
+ * `fxBudget.raymarchLite` (level 2 ONLY — level 3 is false, because desktop
+ * reaches the eclipse through `tier === "full"` instead). That selector
+ * answers "mount the LITE eclipse"; this one answers "is a beat coming at
+ * all", and is true on desktop. Do not merge them.
+ *
+ * `level` is `fxBudget.level` (2 = capable phone, 3 = desktop) and `backend`
+ * the RUNTIME backend from tierStore — never `webgpuEnabled()`, which is a
+ * build-time flag that is true in production even on a browser that handed
+ * us the WebGL2 fallback. `backend` is null until Scene's `onCreated` runs,
+ * so this reads FALSE during the window before the renderer exists: callers
+ * that treat false as a VERDICT (rather than as "not yet") must gate on
+ * `tierStore.resolved && backend !== null` first.
+ */
+export function brandBeatArmed(input: {
+  level: number;
+  backend: Backend | null;
+}): boolean {
+  return HERO_BRAND_COMPACT && input.level >= 2 && input.backend === "webgpu";
+}
 
 // === Phase 4d kill-switch =================================================
 // RAIL_ISLANDS_TOUCH (plans/2026-08-17-mobile-parity.md, Phase 4d — owner

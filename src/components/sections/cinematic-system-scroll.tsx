@@ -85,7 +85,7 @@ import { CTA } from "@/data/copy";
 import {
   SPINE_HEIGHT_VH,
   COMPACT_SPINE_SVH,
-  HERO_BRAND_COMPACT,
+  brandBeatArmed,
   SPINE_BEATS,
 } from "@/lib/spine";
 import { RollLetters } from "@/components/fx/roll-letters";
@@ -1453,7 +1453,7 @@ function CompactSpine({
   // keys the crossfade on `morph.active`, which only the build sets).
   const level = useTierStore((s) => s.fxBudget.level);
   const backend = useTierStore((s) => s.backend);
-  const brandArmed = HERO_BRAND_COMPACT && level >= 2 && backend === "webgpu";
+  const brandArmed = brandBeatArmed({ level, backend });
 
   // Scrim dimmer (compact-only since round 7-3 — the desktop twin died with
   // the desktop scrims): the centred 0.82-alpha navy wash paints OVER the canvas and
@@ -1702,6 +1702,41 @@ export default function CinematicSystemScroll() {
     if (prev === null && mode === "desktop") return;
     const raf = requestAnimationFrame(() => ScrollTrigger.refresh());
     return () => cancelAnimationFrame(raf);
+  }, [hasDetectedViewport, mode]);
+
+  // === THE BRAND-BEAT VERDICT (2026-09-09) ==================================
+  // This component is the DOM authority over the brand anchor, so it is the
+  // only place that can say early and truthfully "no wordmark is coming on
+  // this device" — `stacked` renders no anchor at all (landscape phone), and
+  // `compact` renders one only while brandBeatArmed(). The preloader holds
+  // its counter at the 90% cap until the wordmark has formed AND the eclipse
+  // behind it has risen; with no verdict its only exit was the 17s/22s
+  // insurance timers, so a phone at fxBudget level 1 (or on the WebGL2
+  // fallback) sat at "90 %" for ~23 SECONDS before revealing. Reported live
+  // on an iPhone 2026-09-09 — the loader looked frozen, because it was.
+  //
+  // A SUBSCRIPTION, not a hook: `resolved`/`backend`/`fxBudget` each land
+  // once per load (resolve(), then Scene's onCreated) and a reactive read
+  // would re-render this whole tree for them. The verdict is re-evaluated on
+  // every tierStore write for as long as this component lives, so a runtime
+  // stepDownBudget(2 → 1) — which unmounts the anchor and genuinely kills the
+  // beat mid-intro — publishes it too.
+  //
+  // It is deliberately NOT published while `backend === null`: false there
+  // means "the renderer does not exist yet", not "no beat". A load whose
+  // Canvas never comes up publishes nothing and the timers still backstop it.
+  useEffect(() => {
+    if (!hasDetectedViewport) return;
+    const evaluate = () => {
+      if (useIntroStore.getState().brandBeatSkipped) return;
+      const s = useTierStore.getState();
+      if (!s.resolved || s.backend === null) return;
+      if (mode === "stacked" || !brandBeatArmed({ level: s.fxBudget.level, backend: s.backend })) {
+        useIntroStore.getState().setBrandBeatSkipped();
+      }
+    };
+    evaluate();
+    return useTierStore.subscribe(evaluate);
   }, [hasDetectedViewport, mode]);
 
   // (Removed: the orb-core poster image + its cross-fade machinery. The hero

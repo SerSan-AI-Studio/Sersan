@@ -65,7 +65,7 @@ import * as THREE from "three";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { SPINE_TRAVEL_VH } from "@/lib/spine";
-import { WORLD_VIEW_HEIGHT } from "./constants";
+import { CAMERA_Z, WORLD_VIEW_HEIGHT } from "./constants";
 import { useTextMorphStore } from "./store/textMorphStore";
 import {
   useIntroStore,
@@ -176,6 +176,12 @@ const LOCKUP_OFFSET_Y = -0.04;
  * raised again 0.58 → 0.66 the same day, "a bit bigger" round two):
  * ≈22.4vh tall against the wordmark's ≈16.9vh line. */
 const LOCKUP_SCALE = 0.66;
+/** Widest the mark may render, as a fraction of the visible frame width at
+ *  its own distance (see the HORIZONTAL FIT block in the frame loop). 0.74
+ *  leaves a real margin on a 375px phone for the spore crust, which blooms a
+ *  few percent past the mesh silhouette during the intro regrow. Slack on
+ *  every desktop aspect, where the height-derived scale binds first. */
+const MARK_MAX_WIDTH_FRAC = 0.74;
 /** Toward-camera z bulge (world units) at mid-flight of the lockup→hero
  * move, so it reads as the camera carrying the mark, not a flat slide. */
 const FLIGHT_BULGE = 0.7;
@@ -461,6 +467,18 @@ export function HeroLogo({ tier, anchors }: HeroLogoProps) {
     return geometry;
   }, [nodes]);
   useEffect(() => () => bodyGeometry.dispose(), [bodyGeometry]);
+
+  /**
+   * The mark's WIDTH in world units at group scale 1 — measured, not assumed.
+   * The normalisation above fixes the HEIGHT (TARGET_HEIGHT) and lets the
+   * width fall where the artwork puts it, so this is the only honest source
+   * for the horizontal fit below. Recomputed only when the geometry changes.
+   */
+  const markWorldWidth = useMemo(() => {
+    bodyGeometry.computeBoundingBox();
+    const b = bodyGeometry.boundingBox;
+    return b ? Math.max(b.max.x - b.min.x, 1e-4) : TARGET_HEIGHT;
+  }, [bodyGeometry]);
 
   // === Raycast-target material ==============================================
   // The invisible cursor-raycast mesh needs SOME material on both backends
@@ -995,11 +1013,48 @@ export function HeroLogo({ tier, anchors }: HeroLogoProps) {
       THREE.MathUtils.lerp(fx.heroPosZ, heroZ, flight) +
         Math.sin(flight * Math.PI) * FLIGHT_BULGE,
     );
-    group.scale.setScalar(
+    // === HORIZONTAL FIT (2026-09-09) ======================================
+    // Every scale term above is derived from WORLD_VIEW_HEIGHT — the mark is
+    // sized against the viewport's HEIGHT and nothing has ever consulted its
+    // width. On a 16:9 window that is harmless (the lockup mark spans ~26% of
+    // the frame). On a 375×812 phone the visible width at the intro's
+    // dolly-in (camera z = CAMERA_Z·(1 − INTRO_CAM_IN) ≈ 5.76) is ≈2.48 world
+    // against a mark ≈2.51 world wide: the mark is 101% of the frame and
+    // bleeds off both edges — which is exactly what the loading screen looked
+    // like on the owner's iPhone, 2026-09-09.
+    //
+    // Fixed by fitting to the frame instead of clamping a magic breakpoint:
+    // the visible width AT THE MARK'S OWN DISTANCE this frame, times the
+    // fraction of it the mark may occupy. It is applied to the final scalar,
+    // so it holds across the whole lockup→hero flight and the scroll recede
+    // rather than at one pose; on any desktop aspect the raw scale is already
+    // well inside the limit and `Math.min` picks it unchanged — the desktop
+    // render path does not move.
+    const scaleRaw =
       baseScale *
-        THREE.MathUtils.lerp(LOCKUP_SCALE, 1 - 0.2 * hp, flight) *
-        (0.92 + 0.08 * fade),
-    );
+      THREE.MathUtils.lerp(LOCKUP_SCALE, 1 - 0.2 * hp, flight) *
+      (0.92 + 0.08 * fade);
+    // Distance camera→mark. WORLD_VIEW_HEIGHT is defined at CAMERA_Z, so the
+    // visible height at any other distance is a straight proportion of it —
+    // no FOV maths, and no cast off the base Camera type. (The mid-page warp
+    // does widen the FOV, but the clamp is slack by then anyway.)
+    const distToMark = camera.position.z - group.position.z;
+    let scaleOut = scaleRaw;
+    // Guarded on a real distance. "Fraction of the visible width" stops
+    // meaning anything as the camera closes on the mark's own plane — the
+    // limit would fall toward zero and shrink the mark to nothing — and there
+    // is no framing to protect there anyway. Below 1 world unit the clamp
+    // simply does not apply. (Today the closest the camera ever gets during
+    // the intro is ≈6.06: z 5.76 at the dolly-in against heroPosZ −0.3.)
+    if (distToMark > 1) {
+      const visibleH = WORLD_VIEW_HEIGHT * (distToMark / CAMERA_Z);
+      const visibleW = visibleH * (size.width / size.height);
+      scaleOut = Math.min(
+        scaleRaw,
+        (visibleW * MARK_MAX_WIDTH_FRAC) / markWorldWidth,
+      );
+    }
+    group.scale.setScalar(scaleOut);
 
 
     // ANCHORED mark — no drag-to-rotate, no idle spin. The mark sits STILL at

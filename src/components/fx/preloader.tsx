@@ -46,8 +46,15 @@
  * fonts/load/manifest keep a single stuck sub-resource from trapping the
  * counter; `warm` stays the only truthful gate on reaching 100. A MIN
  * visible time (700ms; 350ms on a repeat visit in this tab session)
- * prevents a flash; a MAX watchdog (~14s) guarantees a stuck GPU never traps
- * the visitor.
+ * prevents a flash; a MAX watchdog (21s, derived — this docblock claimed
+ * ~14s while the constant read 25000, which is the drift the derived chain
+ * below exists to stop) guarantees a stuck GPU never traps the visitor.
+ *
+ * The BRAND-BEAT holds (wordmark + eclipse) are the one place the counter can
+ * legitimately park at its 90% cap, so they take their release from the
+ * island's own verdict — `introStore.brandBeatSkipped`, published by the
+ * components that decide whether a beat mounts at all — and only fall back to
+ * the timers when a beat that WAS armed then stalls.
  *
  * SSR-safe: the overlay renders only AFTER mount (no hydration mismatch).
  * Body scroll is locked while visible (Lenis parked + html overflow hidden)
@@ -96,20 +103,38 @@ const STAGE_MAX_MS = 12000;
 // before the SERSAN assemble wave has fully formed). Sized as the stage
 // worst case + the 3.6s entry with margin; paths that never mount a
 // wordmark (WebGL2, phones without the brand anchor) self-resolve here.
-const WORDMARK_MAX_MS = 17000;
+// DERIVED, not typed in (2026-09-09). These are now INSURANCE ONLY: since
+// `brandBeatSkipped` exists, a device that was never going to play the beat
+// leaves the hold the moment the backend resolves, so the only load that
+// still reaches this number is one where the beat WAS armed and then stalled
+// — and cutting that short would truncate the show on a slow-but-working
+// phone, which is the opposite of what these holds are for.
+//
+// The ordering is a CONTRACT, not a coincidence: the wordmark cannot form
+// before the stage actor exists, so this must sit above STAGE_MAX_MS by at
+// least the 3.6s entry. Writing the three numbers by hand is exactly how
+// that invariant gets broken (it was, briefly, in this very edit: 12000
+// against a STAGE_MAX_MS of 12000 — no room for the entry at all). Deriving
+// them makes the relationship the source of truth, so moving the stage bound
+// carries the other two with it.
+const WORDMARK_MAX_MS = STAGE_MAX_MS + 4000;
 // Bound on the ECLIPSE hold (owner 2026-08-28: the black hole must already
 // fill the screen behind SERSAN before the zoom-out starts). Its deferred
 // build only arms once the wordmark has assembled, so this waits on top of
 // the wordmark hold; every path that never builds one (WebGL2, lite tiers,
 // skipped intro) self-resolves here.
-const ECLIPSE_MAX_MS = 22000;
+// The wordmark bound plus the eclipse's own deferred build — it only ARMS at
+// assembleDone, i.e. after the wordmark — and its compileAsync warm.
+const ECLIPSE_MAX_MS = WORDMARK_MAX_MS + 2500;
 // Milliseconds the eclipse is given to IGNITE (its own ~1.2s smoothstep
 // rise) once ready, so the reveal never starts on a half-risen horizon.
 const ECLIPSE_IGNITE_MS = 900;
 // LAST-RESORT safety only: if the scene never reports `warm` (a truly stuck
 // GPU), reveal anyway so the visitor is never trapped. Sits above
 // WORDMARK_MAX_MS with margin.
-const WATCHDOG_MS = 25000;
+// Derived like the two above, so its "sits above ECLIPSE_MAX_MS with margin"
+// contract survives any future move of the stage bound.
+const WATCHDOG_MS = ECLIPSE_MAX_MS + 2500;
 // Counter easing toward its target each frame (fraction per ~16ms frame).
 // Lowered 0.12 → 0.08 (owner live pass 2026-08-28: "fai tutto più lento e
 // smooth") — the readout breathes instead of ticking.
@@ -248,7 +273,34 @@ export function Preloader() {
       // resolve() runs.
       const ts = useTierStore.getState();
       const tierOff = ts.resolved && ts.tier === "off";
+      // The two compute-only holds below (wordmark, eclipse) can NEVER be
+      // satisfied on the WebGL2 fallback: HeroTextParticles returns before it
+      // can build, so `wordmarkFormed` is never published, and HomeSingularity
+      // returns null, so `eclipseReady` never fires. `tierOff` does NOT cover
+      // this — a desktop without WebGPU resolves to "full" and a phone to
+      // "lite"; both mount a Canvas. Without this escape the counter parks at
+      // the 90% cap until the 17s/22s insurance timers fire.
+      //
+      // Must read the RUNTIME backend, never `webgpuEnabled()`: that is a
+      // build-time flag, true in production regardless of what the adapter
+      // actually handed us, and keying on it would skip the wordmark hold on
+      // real WebGPU sessions — the exact thing the hold exists for.
+      // `backend` stays null until Scene's `onCreated` runs, so a session that
+      // never mounts a Canvas still falls through to the existing timers.
+      const noCompute = ts.backend !== null && ts.backend !== "webgpu";
       const intro = useIntroStore.getState();
+      // THE VERDICT (2026-09-09). `noCompute` above only catches the WebGL2
+      // fallback; it says nothing about a TRUE WebGPU phone that still never
+      // plays the beat because its fxBudget resolved to level 1 (no compact
+      // brand anchor, no lite eclipse island) or because it is in landscape
+      // (stacked spine, no anchor at all). Those phones satisfied every
+      // signal, reached the 90% cap, and then sat there for ~23 seconds
+      // waiting out WORDMARK_MAX_MS and ECLIPSE_MAX_MS for a wordmark that
+      // was never mounting — the live iPhone report. `brandBeatSkipped` is
+      // the island side saying so out loud (see introStore), published by
+      // CinematicSystemScroll the moment the backend resolves and by
+      // HeroTextParticles' own dead ends. Both holds take it as satisfied.
+      const brandSkipped = intro.brandBeatSkipped;
       signals.warm = tierOff || intro.warmReady;
       const warmProgress = tierOff ? 1 : intro.warmProgress;
       const mp = manifestProgress();
@@ -261,7 +313,12 @@ export function Preloader() {
       // Wordmark hold (owner: the loader lasts until SERSAN has fully
       // composed) — same shape as the stage gate, bounded by WORDMARK_MAX_MS.
       const wordmarkReady =
-        !onHome || tierOff || wordmarkForced || intro.wordmarkFormed;
+        !onHome ||
+        tierOff ||
+        noCompute ||
+        brandSkipped ||
+        wordmarkForced ||
+        intro.wordmarkFormed;
       // Eclipse hold: the hole must be built AND given its ignite beat, so
       // the curtain lifts onto a black hole already filling the frame behind
       // the brand — never onto one still rising.
@@ -271,6 +328,8 @@ export function Preloader() {
       const eclipseReady =
         !onHome ||
         tierOff ||
+        noCompute ||
+        brandSkipped ||
         eclipseForced ||
         (eclipseReadyAt > 0 &&
           performance.now() - eclipseReadyAt >= ECLIPSE_IGNITE_MS);
@@ -363,6 +422,9 @@ export function Preloader() {
 
     // ----- Counter ease + rise floor + reveal trigger (single rAF) ---------
     let current = 0; // 0..1
+    // Previous frame's timestamp, for the dt-corrected ease below. 0 = first
+    // frame, treated as one nominal 60Hz step.
+    let prevNow = 0;
     const frame = () => {
       if (cancelled || revealed) return;
       // Keep parking Lenis until the provider has created it.
@@ -372,7 +434,20 @@ export function Preloader() {
       // Truthful target: driven ONLY by real readiness signals, never a
       // fixed timer.
       const target = targetFraction();
-      current += (target - current) * COUNTER_EASE;
+      // dt-CORRECTED ease. COUNTER_EASE is authored as "fraction per ~16ms
+      // frame"; applying it raw makes the readout's speed a function of the
+      // visitor's refresh rate. During the climb the RISE floor below binds
+      // first and hides it, but it bites on the TAIL: once every gate passes,
+      // `target` jumps to 1 with `current` at the 0.9 cap and the snap needs
+      // > 0.99, which is ~28 frames of pure ease with nothing left to wait
+      // for — 0.47s at 60Hz, 0.23s at 120Hz, ~0.93s at 30fps. Dead time in the
+      // one moment the visitor is actually watching the number.
+      // dt is CLAMPED so a tab resuming from background rAF starvation cannot
+      // snap through the RISE floor's readable arc in a single step.
+      const dtMs = prevNow ? Math.min(now - prevNow, 100) : 1000 / 60;
+      prevNow = now;
+      const k = 1 - Math.pow(1 - COUNTER_EASE, dtMs / (1000 / 60));
+      current += (target - current) * k;
       // Snap the last sliver so we land cleanly on 100 (the ease asymptotes
       // at 99 forever otherwise).
       if (target >= 1 && current > 0.99) current = 1;

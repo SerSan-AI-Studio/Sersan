@@ -122,6 +122,33 @@ interface IntroState {
   wordmarkFormed: boolean;
   setWordmarkFormed: () => void;
   /**
+   * True once it is KNOWN that this load will NEVER play the brand beat —
+   * the SERSAN wordmark assemble and, with it, the eclipse that rises behind
+   * it (Scene.tsx: "the eclipse exists only for the brand beat", so one
+   * verdict answers for both). It is the ISLAND'S OWN "I am not coming"
+   * signal, published from the places that actually decide:
+   *
+   *   · CinematicSystemScroll — the DOM authority over the brand ANCHOR:
+   *     `stacked` mode renders none (landscape phone), and `compact` mode
+   *     renders one only while `brandBeatArmed()` (src/lib/spine.ts). A phone
+   *     that resolves to fxBudget level 1 therefore never mounts a wordmark
+   *     and never mounts the eclipse island.
+   *   · HeroTextParticles — the build's own dead ends: the WebGL2 fallback
+   *     backend (compute storage indexing no-ops, three #31221) and a failed
+   *     dynamic import of the webgpu/tsl/gpgpu chunks.
+   *
+   * WHY IT EXISTS: without it the preloader's only exit from those paths was
+   * the WORDMARK_MAX_MS / ECLIPSE_MAX_MS insurance timers — so a phone that
+   * was never going to play the beat sat at the 90% cap for ~23 SECONDS
+   * before revealing (reported live on an iPhone, 2026-09-09). The timers
+   * stay as insurance for a beat that IS armed and then stalls; this flag is
+   * the fast, truthful exit for a beat that was never armed at all.
+   *
+   * Set-once per hard load, exactly like `heroStageReady` / `wordmarkFormed`.
+   */
+  brandBeatSkipped: boolean;
+  setBrandBeatSkipped: () => void;
+  /**
    * True once the WebGL scene is actually RENDERING SMOOTHLY — i.e. the WebGPU
    * pipelines/compute kernels have finished compiling (the heavy one-time cost
    * that otherwise stalls the first frames). Set by PipelineWarmup (in-Canvas)
@@ -174,6 +201,10 @@ const createIntroStore = () =>
     wordmarkFormed: false,
     setWordmarkFormed: () => {
       if (!get().wordmarkFormed) set({ wordmarkFormed: true });
+    },
+    brandBeatSkipped: false,
+    setBrandBeatSkipped: () => {
+      if (!get().brandBeatSkipped) set({ brandBeatSkipped: true });
     },
     warmReady: false,
     // Ready ⇒ progress is 1 by definition (monotonic: never lowered after).

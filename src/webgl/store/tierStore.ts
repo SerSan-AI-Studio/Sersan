@@ -237,18 +237,46 @@ function detectTier(): SceneTier {
  * GPU class is a BUDGET input, not a capability test. What we use instead is a
  * DENY-LIST of pre-2020 tile parts: an unknown 2026 phone must PASS.
  *
- * OPEN QA ITEM (MOBILE_HOME_SPEC §6 Wave 3, chunk M): the `cores <= 4` cut is
- * carried over from SEQ.LITE_MIN_CORES so the codebase holds ONE number. It is
- * not yet reconciled against a real device — log navigator.hardwareConcurrency
- * on every target handset and, if a supported iPhone reports ≤ 4, lower the
- * threshold and record the reading here. Do not guess it in code review.
+ * CLOSED 2026-09-09 (was: OPEN QA ITEM, MOBILE_HOME_SPEC §6 Wave 3, chunk M —
+ * "the `cores <= 4` cut is carried over from SEQ.LITE_MIN_CORES … if a
+ * supported iPhone reports ≤ 4, lower the threshold"). Rather than pick a new
+ * number by hand, the cut is now SUBORDINATE to `navigator.gpu`: a
+ * coarse-pointer device that exposes WebGPU is modern by construction and
+ * skips the core test entirely; one that does not still faces it unchanged.
+ * See the body. The remaining unknown is only which phones report what, and
+ * that no longer changes the verdict for a WebGPU handset.
  */
 function detectPhoneGL(): boolean {
   if (typeof window === "undefined") return false;
   if (window.matchMedia("(pointer: fine)").matches) return false;
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+  // WEBGPU AS THE MODERNITY SIGNAL (2026-09-09). `navigator.gpu` is a
+  // synchronous capability read — no UA sniffing, no adapter request, no
+  // await — and a coarse-pointer device that exposes it is a 2023-or-later
+  // handset by construction. It is a strictly better answer to the question
+  // the core count was standing in for, so where the two disagree it wins.
+  const hasWebGPU = "gpu" in navigator;
   const cores = navigator.hardwareConcurrency;
-  if (typeof cores === "number" && cores > 0 && cores <= 4) return false; // = SEQ.LITE_MIN_CORES
+  // The `cores <= 4` cut was carried over from SEQ.LITE_MIN_CORES and is the
+  // OPEN QA ITEM in this function's docblock: "if a supported iPhone reports
+  // ≤ 4, lower the threshold and record the reading here". It does — iOS
+  // Safari reports a small, capped figure — so this cut was silently
+  // demoting current iPhones to fxBudget level 1, where the compact brand
+  // anchor is never rendered and the lite eclipse island never mounts. The
+  // visible cost was not a missing effect but a STALLED LOADER: the
+  // preloader held its counter at the 90% cap waiting for a wordmark that
+  // could not arrive (reported live on an iPhone, 2026-09-09; that hold now
+  // also has `brandBeatSkipped` as a fast exit, so this change is about the
+  // phone GETTING the beat, not about the stall).
+  //
+  // Kept verbatim for a device WITHOUT WebGPU: there the core count is still
+  // the only modernity signal we have. The pre-2020 tile-part deny-list
+  // below, the deviceMemory floor and the WebGL2 requirement all still apply
+  // to every device either way — this widens one heuristic, it does not open
+  // the gate.
+  if (!hasWebGPU && typeof cores === "number" && cores > 0 && cores <= 4) {
+    return false; // = SEQ.LITE_MIN_CORES
+  }
   const mem = (navigator as { deviceMemory?: number }).deviceMemory;
   if (typeof mem === "number" && mem > 0 && mem < 4) return false; // absent on iOS → passes
   let gl: WebGL2RenderingContext | null = null;

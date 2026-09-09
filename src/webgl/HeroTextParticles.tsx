@@ -290,7 +290,13 @@ export function HeroTextParticles(_props: HeroTextParticlesProps) {
 
   // === Build: sample the brand from the live DOM, spin up the sim ===========
   useEffect(() => {
-    if (!webgpuEnabled()) return;
+    // BUILD-FLAG dead end: with WebGPU compiled out there is no brand beat on
+    // any device, so tell the preloader now instead of leaving it to hold the
+    // counter at 90% until its insurance timers fire (see brandBeatSkipped).
+    if (!webgpuEnabled()) {
+      useIntroStore.getState().setBrandBeatSkipped();
+      return;
+    }
     let cancelled = false;
     let built: MorphBuild | null = null;
 
@@ -308,7 +314,13 @@ export function HeroTextParticles(_props: HeroTextParticlesProps) {
         !!bk &&
         bk.isWebGLBackend !== true &&
         typeof (gl as unknown as { compute?: unknown }).compute === "function";
-      if (!isWebGPUBackend) return;
+      // WebGL2-fallback dead end (three #31221). Same reasoning as the build
+      // flag above: this session will never form a wordmark, so publish the
+      // verdict rather than let the preloader wait out its 17s/22s timers.
+      if (!isWebGPUBackend) {
+        useIntroStore.getState().setBrandBeatSkipped();
+        return;
+      }
 
       // DETACHED-ANCHOR guard (plan Phase 4b hardening): if the anchor this
       // instance last sampled is no longer in the document (the compact
@@ -559,7 +571,18 @@ export function HeroTextParticles(_props: HeroTextParticlesProps) {
       // actually HAS a build (see "THE CLAIM" below), so `active` can never be
       // true without a live, drawing loop — a wedged island degrades to the
       // plain DOM hero exactly like every other fallback path.
-    });
+    })
+      // The chain had NO rejection handler: a failed dynamic import of the
+      // three/webgpu · three/tsl · gpgpuNodeSim chunks (a flaky network on
+      // the very device class this beat is for) produced an unhandled
+      // rejection and, worse, silence — the preloader went on holding its
+      // counter for a wordmark whose code never arrived. Publish the same
+      // verdict the dead ends above use, then re-surface the error so it is
+      // still visible in the console rather than swallowed.
+      .catch((err) => {
+        if (!cancelled) useIntroStore.getState().setBrandBeatSkipped();
+        console.error("HeroTextParticles: brand build failed", err);
+      });
 
     return () => {
       cancelled = true;
@@ -650,7 +673,21 @@ export function HeroTextParticles(_props: HeroTextParticlesProps) {
       });
     }
 
+    // SIMULATION delta — clamped hard at 1/30 s because it integrates the
+    // spring/turbulence step: a big frame would overshoot and pop the field.
     const delta = Math.min(rawDelta, 1 / 30);
+    // NARRATIVE-CLOCK delta. The entry assemble and the touch beat's
+    // hold/ramp are pure animation ramps — nothing is integrated, so nothing
+    // pops — and running them on the simulation clamp made their duration a
+    // function of the FRAME COUNT, not of time: ENTRY_DURATION 3.6 s needs
+    // ≥108 frames whatever the clock says, which is 3.6 s at 30 fps and
+    // 10.8 s at 10. That stretch lands squarely on the preloader, which holds
+    // its counter until `wordmarkFormed` — so the slower the phone, the
+    // longer the 90% wait, compounding exactly where it hurts. Clamped at
+    // 1/10 s so a single stalled frame (a tab resuming, a GC pause) still
+    // cannot jump the assemble, but a genuinely slow phone now plays the
+    // 3.6 s beat in 3.6 s.
+    const clockDelta = Math.min(rawDelta, 1 / 10);
 
     // HOLD until the hero stage is live (preloader v2, owner 2026-08-28:
     // "aggiungi anche la scritta Sersan nel preloader"): on a hard load the
@@ -681,7 +718,10 @@ export function HeroTextParticles(_props: HeroTextParticlesProps) {
     // Advances once the curtain is up; flips the page-lifetime assembleDone
     // when complete so the gate starts counting scroll from a formed brand.
     if (entryRef.current < 1) {
-      entryRef.current = Math.min(entryRef.current + delta / ENTRY_DURATION, 1);
+      entryRef.current = Math.min(
+        entryRef.current + clockDelta / ENTRY_DURATION,
+        1,
+      );
       if (entryRef.current >= 1 && !useTextMorphStore.getState().assembleDone) {
         useTextMorphStore.setState({ assembleDone: true });
       }
@@ -746,7 +786,7 @@ export function HeroTextParticles(_props: HeroTextParticlesProps) {
           autoDoneRef.current = true;
           pendingGate = 1;
         } else if (entryRef.current >= 1) {
-          autoClockRef.current += delta;
+          autoClockRef.current += clockDelta;
           const t = autoClockRef.current;
           // HOLD GATED ON THE ECLIPSE (see the constants block): the ramp
           // starts on the FIRST frame the minimum hold has elapsed AND (the
