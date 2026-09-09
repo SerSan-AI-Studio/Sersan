@@ -122,12 +122,14 @@
  * site mounts `<HomeSingularity lite />` when `fxBudget.raymarchLite &&
  * backend === "webgpu"` (level 2 only; level 3 ⇒ raymarchLite false ⇒ the
  * desktop mount is byte-identical with lite=false). In lite the march runs
- * at the SEQ low step — `uIterations = SEQ.ITER_LO (64)`, `uStep =
- * SEQ.STEP_LO (0.0142)`, path product 1.818 ≈ the factory's 128×0.0071×2 =
- * 1.82 — iterations and step MUST move inversely (blackHoleMaterial contract).
- * Fallback knob if the Phase 6 measure fails: 48 iterations with step
- * 0.0071·128/48 ≈ 0.01893 (product 1.817). While the eclipse can be visible
- * lite also holds `tierStore.dprCap` at 1 (the coarse range is {1,1,1.5}: the
+ * at 48 iterations with step 0.01893 — path product 1.817 ≈ the factory's
+ * 128×0.0071×2 = 1.82 — iterations and step MUST move inversely
+ * (blackHoleMaterial contract). This IS the "fallback knob if the Phase 6
+ * measure fails" this docblock used to describe as hypothetical: the measure
+ * ran on the owner's iPhone 2026-09-09, the hero eclipse dropped frames, and
+ * the swap was taken (from SEQ.ITER_LO 64 / SEQ.STEP_LO 0.0142, product
+ * 1.818). While the eclipse can be visible lite also holds
+ * `tierStore.dprCap` (the coarse range is {1.5,1,2}: the
  * monitor may climb to 1.25/1.5 after its hysteresis, so the cap is
  * meaningful), cleared with a `dprCap === 1` guard on the first
  * visible→invisible edge / unmount so singularity-passage's own caps
@@ -160,7 +162,6 @@ import {
 import { useTextMorphStore } from "./store/textMorphStore";
 import { usePointerStore, installPointerTracking } from "./store/pointerStore";
 import { useTierStore } from "./store/tierStore";
-import { SEQ } from "./store/seqStore";
 import type { SingularityBuild } from "./singularity/blackHoleMaterial";
 
 /** tan(FOV/2) — the one trig constant the placement math needs. */
@@ -321,26 +322,41 @@ const IGNITE_DURATION = 1.2;
  * SequenceSingularity's scripted quality band. Kept as named constants here
  * so the fallback knob (48 / 0.01893) is a one-line swap.
  */
-const HOME_LITE_ITER = SEQ.ITER_LO;
-const HOME_LITE_STEP = SEQ.STEP_LO;
+// TAKEN 2026-09-09 — the swap this comment was written for. The owner
+// reported the HERO eclipse (not the plunge one) dropping frames on his
+// iPhone and asked for it to cost less "senza utilizzare quel cerchio 2d
+// orribile come fallback". It stays the real march; only the sampling
+// changes. The pair is chosen so the PATH PRODUCT is preserved —
+// 0.0142 × 64 × 2 = 1.818 against 0.01893 × 48 × 2 = 1.817 — which is what
+// makes this invisible rather than a quality cut: the ray still travels the
+// same distance through the field, in 25% fewer, proportionally longer
+// steps. A raymarch is fill-bound (cost ≈ pixels × iterations), so this is a
+// straight 25% off the heaviest thing on the phone's hero.
+const HOME_LITE_ITER = 48;
+const HOME_LITE_STEP = 0.01893;
 /**
  * DPR held while the lite eclipse can be visible.
  *
- * 1 → 1.25 (2026-09-09). The old value was chosen as the BOTTOM of the coarse
- * DPR range as it stood then ({1, 1, 1.5}); that range is now {1.5, 1, 2}
- * (tierStore detectDprRange — the owner's iPhone reports devicePixelRatio 3
- * and was rendering at 1.0), so leaving this at 1 would have pinned the phone
- * BELOW its own starting resolution for the whole intro — the one stretch of
- * the page the visitor actually stares at, and the stretch the "it doesn't
- * look like desktop" report is about. 1.25 is still a real cap, below the new
- * starting DPR, so the march keeps its fill-rate protection.
+ * 1 → 1.25 → BACK TO 1.1 (2026-09-09, same day, and the middle value is the
+ * mistake being corrected).
  *
- * It also un-breaks the release guard below, which compares dprCap BY VALUE:
- * at 1 this was indistinguishable from SEQ.LITE_DPR_CAP (also 1), so a
- * release here could clear a cap the passage had set. At 1.25 the two are
- * distinct again and the guard discriminates as its comment claims.
+ * Raising it to 1.25 was a reasonable-looking move — the coarse DPR range had
+ * just gone from {1, 1, 1.5} to {1.5, 1, 2}, so a cap of 1 now pinned the
+ * phone below its own starting resolution for the whole intro. What it missed
+ * is that a raymarch is FILL-BOUND: cost scales with the pixel count, so
+ * 1.25² / 1² = +56% on the single most expensive thing running during the
+ * hero. The owner reported the hero eclipse dropping frames immediately
+ * afterwards. Reverting is honest, but reverting all the way to 1 gives back
+ * sharpness that was not the problem, so this lands at 1.1: +21% pixels over
+ * the original instead of +56%, and combined with the 48-iteration march
+ * above the eclipse now costs ~0.9× what it did before either change while
+ * rendering slightly sharper than it did then.
+ *
+ * It must also stay DISTINCT from SEQ.LITE_DPR_CAP (1) and SEQ.DPR_CAP (1.5):
+ * the release guard below compares dprCap BY VALUE, so a cap of exactly 1
+ * here could clear one the passage had set.
  */
-const HOME_LITE_DPR_CAP = 1.25;
+const HOME_LITE_DPR_CAP = 1.1;
 
 /**
  * Release the lite DPR cap — GUARDED on the store still holding OUR value, so
