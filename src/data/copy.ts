@@ -42,7 +42,6 @@
  */
 
 import type { Language } from "@/data/translations/types";
-import { caseStudies } from "@/data/case-studies";
 
 export interface Bilingual {
   en: string;
@@ -132,12 +131,14 @@ export const FACTS = {
  * caseStudies.length = 14 a few sections down. Derive or don't state.
  * ------------------------------------------------------------------ */
 
-/** Total named projects in the archive (SerSan builds + prior senior delivery). */
-export const projectCount = (): number => caseStudies.length;
-
-/** Projects SerSan was itself contracted to deliver. Derived from attribution. */
-export const sersanBuildCount = (): number =>
-  caseStudies.filter((c) => c.attribution === "sersan").length;
+/**
+ * MOVED to `@/data/counts` (2026-09-09). They live there, not here, because
+ * this module is imported by `layout.tsx` and therefore by every route —
+ * value-importing `caseStudies` for two integers shipped the whole bilingual
+ * dataset (~19.8 KB brotli) to /trust, /contact, /audit, /consulting,
+ * /resources and /start, none of which render a count. Keep this file
+ * strings-only.
+ */
 
 /**
  * Aggregate proof line that does NOT depend on a count staying true, and does

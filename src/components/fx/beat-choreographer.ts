@@ -248,7 +248,16 @@ export function createBeat(el: HTMLElement, opts: BeatBuildOpts): BeatHandle {
         flexed.push(b.title);
       }
       if (b.body) {
-        const sp = new SplitText(b.body, { type: "words" });
+        // aria:"none" — SplitText's default ("auto") writes an `aria-label`
+        // onto the split element and `aria-hidden` onto the parts. On a <p>
+        // that label is a PROHIBITED attribute (role `paragraph` does not
+        // support naming), and it is the only thing keeping the Lighthouse
+        // accessibility category off 100. Safe here because the split is
+        // `type: "words"`: every span still holds a real word, so the
+        // paragraph reads normally — the label only exists to repair a
+        // CHARACTER split, which this is not. Do NOT copy this to the title
+        // split above: on <h1>/<h2> the label is valid and useful.
+        const sp = new SplitText(b.body, { type: "words", aria: "none" });
         splits.push(sp);
         b.bodyWords = sp.words;
       }

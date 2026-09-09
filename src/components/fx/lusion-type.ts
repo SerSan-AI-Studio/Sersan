@@ -504,9 +504,14 @@ export function useLedgerReveal(
           }
           let bodySplit: SplitText | null = null;
           if (body) {
+            // aria:"none" — see beat-choreographer's body split. `[data-row-body]`
+            // is a <p>, and SplitText's default writes an `aria-label` there,
+            // which role `paragraph` prohibits. A word split needs no label:
+            // each span still carries a real word.
             bodySplit = new SplitText(body, {
               type: "words",
               wordsClass: "split-word",
+              aria: "none",
             });
             splits.push(bodySplit);
           }

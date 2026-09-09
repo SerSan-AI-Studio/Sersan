@@ -172,10 +172,14 @@ export function CaseStudiesClient() {
       <section data-line-anchor="grid" className="pb-16 sm:pb-24">
         <div className="container-px">
           <h2 className="sr-only">{pick(isEn, PROOF_LINE)}</h2>
+          {/* eagerFirst: on the archive the grid IS the page, so the first two
+              stills are genuinely above the fold and worth the head preload.
+              Home passes nothing — see WorkCard's prop doc. */}
           <WorkGrid
             studies={archiveStudies()}
             isEn={isEn}
             planesLive={planesLive}
+            eagerFirst
           />
         </div>
       </section>

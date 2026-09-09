@@ -127,6 +127,23 @@ export function HeadingChoreographer({
           // Split granularity + mask follow the variant. 'blur' is deliberately
           // UNmasked: the CSS blur must bleed past each line box, so a clip
           // would eat the focus-in halo.
+          // SplitText's default `aria:"auto"` writes an `aria-label` onto the
+          // split element and `aria-hidden` onto its parts. On a heading the
+          // label is valid and useful. On a <p> it is a PROHIBITED attribute
+          // (role `paragraph` does not support naming) and fails axe's
+          // `aria-prohibited-attr` — at least one `[data-split-reveal]` in the
+          // tree is a paragraph, and it was the last thing holding the
+          // Lighthouse accessibility category below 100.
+          //
+          // Dropping it is safe for the word/line variants: each part still
+          // carries real text, so removing BOTH the label and the parts'
+          // aria-hidden leaves the element read normally. The 'chars' variant
+          // always keeps "auto" — a character split genuinely needs the label,
+          // or assistive tech spells the string out letter by letter.
+          const ariaMode =
+            variant === "chars" || /^H[1-6]$/.test(el.tagName)
+              ? "auto"
+              : "none";
           let split: SplitText;
           let parts: Element[];
           if (variant === "chars") {
@@ -134,6 +151,7 @@ export function HeadingChoreographer({
               type: "chars",
               mask: "chars",
               charsClass: "split-char",
+              aria: "auto",
             });
             parts = split.chars;
           } else if (variant === "words") {
@@ -141,12 +159,14 @@ export function HeadingChoreographer({
               type: "words",
               mask: "words",
               wordsClass: "split-word",
+              aria: ariaMode,
             });
             parts = split.words;
           } else if (variant === "blur") {
             split = new SplitText(el, {
               type: "lines",
               linesClass: "split-line",
+              aria: ariaMode,
             });
             parts = split.lines;
           } else {
@@ -155,6 +175,7 @@ export function HeadingChoreographer({
               type: "lines",
               mask: "lines",
               linesClass: "split-line",
+              aria: ariaMode,
             });
             parts = split.lines;
           }

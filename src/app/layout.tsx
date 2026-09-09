@@ -84,8 +84,13 @@ const sersanDisplay = localFont({
 
 const switzer = localFont({
   variable: "--font-switzer",
+  // `next/font/local` emits a High-priority <link rel="preload"> for EVERY
+  // file listed here. The 300 face was 17.9 KB of preload on every route with
+  // nothing rendering it: no `font-light`, no `font-[300]` and no
+  // `font-weight: 300` anywhere in src (the hero's light look is an INLINE
+  // weight on the Sersan Display face — see cinematic-system-scroll.tsx).
+  // The woff2 stays in ../fonts, unreferenced, if the weight is ever wanted.
   src: [
-    { path: "../fonts/switzer-300.woff2", weight: "300", style: "normal" },
     { path: "../fonts/switzer-400.woff2", weight: "400", style: "normal" },
     { path: "../fonts/switzer-500.woff2", weight: "500", style: "normal" },
     { path: "../fonts/switzer-600.woff2", weight: "600", style: "normal" },

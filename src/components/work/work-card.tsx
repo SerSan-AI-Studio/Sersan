@@ -120,6 +120,7 @@ export function WorkCard({
   isEn,
   planeOwned,
   className,
+  eagerFirst = false,
 }: {
   study: CaseStudy;
   index: number;
@@ -127,6 +128,15 @@ export function WorkCard({
   /** True when the WebGL depth-parallax plane owns this card's media box. */
   planeOwned: boolean;
   className?: string;
+  /**
+   * Let the first two stills load eagerly. React 19 hoists an eager <img>
+   * into the head as <link rel="preload" as="image">, so this is only correct
+   * where the grid IS the page — the /case-studies archive. On home the grid
+   * is section 05 of 10, held at opacity 0 by `sersan-intro-hold`, and the two
+   * preloads (~123 KB) only compete with the first fetch wave.
+   * Defaults to false so the expensive behaviour has to be asked for.
+   */
+  eagerFirst?: boolean;
 }) {
   const cardRef = useRef<HTMLAnchorElement | null>(null);
   const onFlip = useFlipSource(study.id, study.previewImage);
@@ -364,7 +374,7 @@ export function WorkCard({
             src={study.previewImage}
             alt=""
             className="fw-still"
-            loading={index < 2 ? "eager" : "lazy"}
+            loading={eagerFirst && index < 2 ? "eager" : "lazy"}
             decoding="async"
           />
         ) : (
@@ -404,10 +414,13 @@ export function WorkGrid({
   studies,
   isEn,
   planesLive,
+  eagerFirst = false,
 }: {
   studies: CaseStudy[];
   isEn: boolean;
   planesLive: boolean;
+  /** See WorkCard: only the archive, where the grid is the page. */
+  eagerFirst?: boolean;
 }) {
   const gridRef = useRef<HTMLDivElement | null>(null);
 
@@ -470,6 +483,7 @@ export function WorkGrid({
           index={i}
           isEn={isEn}
           planeOwned={planesLive && Boolean(study.depthImage)}
+          eagerFirst={eagerFirst}
           className={i >= 2 ? "mt-16 md:mt-24" : i > 0 ? "mt-16 md:mt-0" : ""}
         />
       ))}

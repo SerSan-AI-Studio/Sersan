@@ -29,7 +29,8 @@ import {
 import { createBeat, type BeatHandle } from "@/components/fx/beat-choreographer";
 import { SPINE_GUTTER_STYLE } from "@/components/fx/spine-gutter";
 import { SPINE_BEATS } from "@/lib/spine";
-import { POSITIONING, projectCount, sersanBuildCount } from "@/data/copy";
+import { POSITIONING } from "@/data/copy";
+import { projectCount, sersanBuildCount } from "@/data/counts";
 import { getLenis } from "@/lib/lenis-singleton";
 import { suspendSnap } from "@/lib/scroll-snap";
 import { START_HREF } from "@/lib/site";

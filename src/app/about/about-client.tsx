@@ -23,8 +23,8 @@ import {
   FACTS,
   POSITIONING,
   pick,
-  sersanBuildCount,
 } from "@/data/copy";
+import { sersanBuildCount } from "@/data/counts";
 import { useLanguage } from "@/components/language-provider";
 import { START_HREF } from "@/lib/site";
 import { useCentreFocus } from "@/lib/use-centre-focus";

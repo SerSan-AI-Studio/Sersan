@@ -79,15 +79,41 @@ function RailVideo({ src, poster }: { src: string; poster?: string }) {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const io = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) void el.play().catch(() => {});
-        else el.pause();
-      },
-      { threshold: 0.15 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
+    // WCAG 2.2.2 (Pause, Stop, Hide): a muted clip that LOOPS and auto-starts
+    // is moving content running longer than five seconds with no way to stop
+    // it. The rest of the site disarms under prefers-reduced-motion — the whole
+    // WebGL layer never mounts, and a global CSS block neutralises the DOM
+    // animation — but that CSS cannot reach a <video>, so these clips were the
+    // one thing still moving for a visitor who asked for stillness.
+    // Under reduced motion we never arm the observer: the `poster` frame stays
+    // up and carries the same information.
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let io: IntersectionObserver | null = null;
+    const arm = () => {
+      if (io || mq.matches) return;
+      io = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) void el.play().catch(() => {});
+          else el.pause();
+        },
+        { threshold: 0.15 },
+      );
+      io.observe(el);
+    };
+    const disarm = () => {
+      io?.disconnect();
+      io = null;
+      el.pause();
+    };
+    // Honour a LIVE change of the preference, not only its value at mount —
+    // the OS toggle should take effect without a reload.
+    const onChange = () => (mq.matches ? disarm() : arm());
+    arm();
+    mq.addEventListener("change", onChange);
+    return () => {
+      mq.removeEventListener("change", onChange);
+      io?.disconnect();
+    };
   }, []);
   return (
     <video
