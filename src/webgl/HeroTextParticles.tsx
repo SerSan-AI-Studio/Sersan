@@ -52,7 +52,11 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { WORLD_VIEW_HEIGHT } from "./constants";
 import { sampleTextPoints, type TextSpec } from "./text/sampleTextPoints";
 import { webgpuEnabled } from "./renderer/createRenderer";
-import { useIntroStore, introCamShiftRef } from "./store/introStore";
+import {
+  useIntroStore,
+  introCamShiftRef,
+  introZoomRef,
+} from "./store/introStore";
 import { useTextMorphStore } from "./store/textMorphStore";
 import { useFxStore } from "./store/fxStore";
 import { useTierStore, type SceneTier } from "./store/tierStore";
@@ -104,8 +108,24 @@ const ENTRY_DURATION = 3.6;
  * WITHOUT marking the session skip (only an explicit tap/Esc does that).
  */
 const AUTO_HOLD_S = 1.5;
-const AUTO_HOLD_MAX_S = 3.0;
+/**
+ * 3.0 → 9.0 (2026-09-09). This is the BOUND on the hold, not its normal
+ * length: the release now also waits for SignatureLine's intro camera to land
+ * (see the `introZoomRef` term at the use site), and that walk is 2.4 + 1.9 +
+ * 2.6 plus dwells = 7.2s, starting a beat AFTER this clock does. At 3.0 the
+ * bound fired first every time, which is precisely the bug — the DOM cascaded
+ * in over a camera still mid-choreography. 9.0 clears the walk with margin so
+ * the AND resolves first on a healthy load, and the bound goes back to being
+ * what it is meant to be: insurance for a rig that never lands.
+ */
+const AUTO_HOLD_MAX_S = 9.0;
 const AUTO_RAMP_S = 1.5;
+/**
+ * `introZoomRef` below this counts as "the camera has landed". It rests at 0
+ * and the final gate eases to exactly 0, so this only forgives the tail of
+ * the ease rather than releasing early.
+ */
+const INTRO_LANDED_EPS = 0.02;
 const AUTO_SCROLL_ABORT_PX = 24;
 
 /**
@@ -794,10 +814,29 @@ export function HeroTextParticles(_props: HeroTextParticlesProps) {
           // `eclipseReady` is a transient getState() read (no subscription);
           // the start instant is latched in autoRampAtRef so the ramp is
           // measured from when it actually began, not from AUTO_HOLD_S.
+          // ALSO GATED ON THE INTRO CAMERA HAVING LANDED (2026-09-09).
+          // The touch beat and SignatureLine's intro exit are two independent
+          // clocks, and this one was much the shorter: hold 1.5s + ramp 1.5s
+          // against a gate walk of 2.4 + 1.9 + 2.6 plus dwells = 7.2s. So the
+          // DOM hero cascaded in while the camera was still climbing out of
+          // the hole and pushing into the mark — the owner, from his iPhone:
+          // "si vede la camera che si sposta nel logo dietro le scritte della
+          // hero". Desktop never shows this because there the gate is driven
+          // by the reader's own wheel, so the DOM waits for a person; nothing
+          // was waiting for anything on touch.
+          //
+          // `introZoomRef` is the dolly fraction SignatureLine publishes each
+          // frame (1 = inside the hole at the load hold, 0 = landed in the
+          // hero frame). It RESTS at 0, so a soft entry, a skipped intro or
+          // any path that never runs the rig reads "landed" immediately and
+          // this term costs nothing. AUTO_HOLD_MAX_S remains the bound, now
+          // sized past the gate walk, so a rig that never lands still frees
+          // the beat instead of trapping the brand on screen.
           if (
             autoRampAtRef.current < 0 &&
             t >= AUTO_HOLD_S &&
-            (st0.eclipseReady || t >= AUTO_HOLD_MAX_S)
+            ((introZoomRef.current <= INTRO_LANDED_EPS && st0.eclipseReady) ||
+              t >= AUTO_HOLD_MAX_S)
           ) {
             autoRampAtRef.current = t;
           }
