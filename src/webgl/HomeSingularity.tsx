@@ -323,8 +323,24 @@ const IGNITE_DURATION = 1.2;
  */
 const HOME_LITE_ITER = SEQ.ITER_LO;
 const HOME_LITE_STEP = SEQ.STEP_LO;
-/** DPR held while the lite eclipse can be visible (coarse range {1,1,1.5}). */
-const HOME_LITE_DPR_CAP = 1;
+/**
+ * DPR held while the lite eclipse can be visible.
+ *
+ * 1 → 1.25 (2026-09-09). The old value was chosen as the BOTTOM of the coarse
+ * DPR range as it stood then ({1, 1, 1.5}); that range is now {1.5, 1, 2}
+ * (tierStore detectDprRange — the owner's iPhone reports devicePixelRatio 3
+ * and was rendering at 1.0), so leaving this at 1 would have pinned the phone
+ * BELOW its own starting resolution for the whole intro — the one stretch of
+ * the page the visitor actually stares at, and the stretch the "it doesn't
+ * look like desktop" report is about. 1.25 is still a real cap, below the new
+ * starting DPR, so the march keeps its fill-rate protection.
+ *
+ * It also un-breaks the release guard below, which compares dprCap BY VALUE:
+ * at 1 this was indistinguishable from SEQ.LITE_DPR_CAP (also 1), so a
+ * release here could clear a cap the passage had set. At 1.25 the two are
+ * distinct again and the guard discriminates as its comment claims.
+ */
+const HOME_LITE_DPR_CAP = 1.25;
 
 /**
  * Release the lite DPR cap — GUARDED on the store still holding OUR value, so

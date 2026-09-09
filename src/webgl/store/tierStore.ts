@@ -353,7 +353,24 @@ function detectDprRange(): { initial: number; min: number; max: number } {
   // SAME string, so adding `apple` to the weak regex would silently halve
   // desktop canvas resolution site-wide. A fine pointer never reaches here.
   if (window.matchMedia("(pointer: coarse)").matches) {
-    return { initial: clamp(1.0), min: clamp(1.0), max: clamp(1.5) };
+    // 2026-09-09 — measured on the owner's iPhone via /diag: devicePixelRatio
+    // 3, backend webgpu, fxBudget level 2. It was rendering at DPR 1.0 on a
+    // 3× screen, i.e. 393×695 = 0.27 MP, which is where the "not like desktop"
+    // impression actually comes from — the effects were all there, just soft.
+    //
+    // Two problems, one fix. The ceiling of 1.5 was far below what the device
+    // can carry: at 2.0 this phone renders 1.09 MP, still THREE AND A HALF
+    // TIMES under the MAX_PIXELS budget (2560×1440) the level-2 profile
+    // already declares and that Lusion itself uses. And starting AT `min`
+    // left AdaptiveResolution with no downward lever at all: its onDecline
+    // reads `dpr.current <= min` on the very first dip and skips straight to
+    // stepDownBudget(), which unmounts the eclipse and the brand anchor
+    // mid-session. Starting at 1.5 gives it two soft steps (1.5 → 1.25 → 1.0)
+    // to spend before it ever reaches for the drastic one.
+    //
+    // `clamp` still pins everything to min(devicePixelRatio, 2), so a 1× or
+    // 2× phone is unaffected by the raised ceiling.
+    return { initial: clamp(1.5), min: clamp(1.0), max: clamp(2.0) };
   }
   switch (detectGpuClass()) {
     case "weak":
@@ -391,8 +408,31 @@ function budgetProfile(level: FxBudget["level"], gyro = false): FxBudget {
     case 2:
       return {
         level: 2,
+        // "lite" vs "full" is a DISTINCTION NOTHING DRAWS: every consumer
+        // (Scene's mount gate, PostFX, PostFXNodes, PointerFlowmap) tests
+        // `!== "off"` and nothing else, so a capable phone has always had the
+        // desktop post chain. Kept as "lite" because it is an honest label for
+        // the intent — a future reduced chain would land here — and renaming
+        // it to "full" would change no behaviour whatsoever.
         postFx: "lite",
-        particleScale: 0.5,
+        // 0.5 → 1 (2026-09-09, owner: "vorrei che anche il mio sito sia
+        // uguale, stessa esperienza"). This one knob halved EVERY particle
+        // system on a capable phone at once — the brand wordmark 48000 →
+        // 24000, DriftParticles 3000 → 1500 — and that is a difference the eye
+        // reads directly as a thinner, cheaper version of the desktop scene.
+        // The phone the profile was tuned against is not the phone that
+        // reaches level 2 any more: since `navigator.gpu` supplanted the
+        // core-count cut, level 2 means a handset that genuinely negotiates
+        // WebGPU compute (verified on the owner's iPhone, /diag). Density is
+        // now shared with desktop; the pixel budget above is what differs,
+        // which is exactly Lusion's own trade.
+        particleScale: 1,
+        // KEPT true. Unlike the two above this is not a reduction of what is
+        // on screen: the lite march runs 64 iterations against 128 with the
+        // step widened to preserve the path product (≈1.82), so the eclipse
+        // reads the same and only the fill cost moves. It is also the single
+        // heaviest thing on the page. Parity of EXPERIENCE, not of iteration
+        // counts.
         raymarchLite: true,
         maxPixels: MAX_PIXELS,
         gyroParallax: gyro,
