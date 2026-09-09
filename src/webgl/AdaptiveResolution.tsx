@@ -31,6 +31,16 @@ import { PerformanceMonitor } from "@react-three/drei";
 import { useIntroStore } from "./store/introStore";
 import { useTierStore } from "./store/tierStore";
 
+/**
+ * Consecutive at-floor decline windows required before the budget cliff. drei
+ * evaluates on ~2.5s windows, so 3 is roughly seven seconds of sustained
+ * trouble with the DPR already at its floor — long enough that a GC pause or
+ * a scroll burst cannot cost a phone its eclipse and its neural lattice for
+ * the rest of the session, short enough that a device which genuinely cannot
+ * hold the band still gets relief.
+ */
+const DECLINE_STREAK = 3;
+
 export function AdaptiveResolution({
   initial,
   min,
@@ -45,6 +55,8 @@ export function AdaptiveResolution({
   const setDpr = useThree((s) => s.setDpr);
   const dpr = useRef(initial);
   const lastChange = useRef(0);
+  /** Consecutive at-floor declines — see the onDecline comment below. */
+  const declineStreak = useRef(0);
 
   // Temporary hard cap (tierStore.dprCap) — the singularity passage clamps
   // the plunge phase to ≤1.5 while the raymarch approaches fullscreen
@@ -137,16 +149,47 @@ export function AdaptiveResolution({
       // otherwise the Phase 2/4 effects would be killed before they ever
       // mount. Only a decline on a WARM scene is evidence the budget is too
       // rich.
+      // SUSTAINED EVIDENCE BEFORE THE CLIFF (2026-09-09). stepDownBudget() is
+      // ONE-WAY and session-permanent — nothing ever climbs back — and it
+      // takes the whole capable-phone experience with it in a single call:
+      // `raymarchLite` false unmounts the hero eclipse, `level < 2` unmounts
+      // the NeuralLattice island (so the DOM SVG fallback appears in its
+      // place) and disarms the compact brand anchor. Firing that on ONE
+      // decline window made the phone's experience a coin toss decided by a
+      // single GC pause or scroll burst: the owner reported the eclipse
+      // missing and the neural section on its fallback "ogni tanto — tipo ora
+      // ho riavviato e si vede la rete neurale giusta". Intermittent, because
+      // the trigger was a transient.
+      //
+      // Now it takes DECLINE_STREAK consecutive at-floor declines, and any
+      // incline resets the count — so the lever still exists for a phone that
+      // genuinely cannot hold the band, but a dip it recovers from costs
+      // nothing. drei evaluates on ~2.5s windows, so this is roughly seven
+      // seconds of sustained trouble AFTER the DPR floor has been reached.
       onDecline={() => {
         if (dpr.current <= min) {
+          // Pre-warm declines never counted and still do not: coarse devices
+          // used to START at the floor, and the pipeline compile under the
+          // preloader is not evidence of anything.
           if (useIntroStore.getState().warmReady) {
-            useTierStore.getState().stepDownBudget();
+            declineStreak.current += 1;
+            if (declineStreak.current >= DECLINE_STREAK) {
+              declineStreak.current = 0;
+              useTierStore.getState().stepDownBudget();
+            }
           }
         } else {
+          declineStreak.current = 0;
           apply(dpr.current - step);
         }
       }}
-      onIncline={() => apply(dpr.current + step)}
+      onIncline={() => {
+        // Evidence of recovery — the streak must be CONSECUTIVE or a phone
+        // that alternates dip/recover for a minute would still fall off the
+        // cliff on accumulated unrelated windows.
+        declineStreak.current = 0;
+        apply(dpr.current + step);
+      }}
     />
   );
 }

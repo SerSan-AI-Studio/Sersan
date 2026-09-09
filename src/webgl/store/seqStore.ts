@@ -423,8 +423,20 @@ export const SEQ = {
    * side-by-side screenshot AND hold ≥ 50 fps; either failing ⇒ this stays
    * false and the CSS composite beat remains the shipped phone path). Typed
    * `boolean` on purpose so the flip is a one-character change with no type
-   * ripple; desktop (`tier full` ⇒ raymarchLite false) never consults it. */
-  LITE_RAYMARCH: false as boolean,
+   * ripple; desktop (`tier full` ⇒ raymarchLite false) never consults it.
+   *
+   * FLIPPED ON 2026-09-09 — the owner asked for the plunge hole on his phone
+   * ("manca il buco nero … nella sezione del viaggio a velocità della luce")
+   * and he IS the device gate this flag was waiting for: a 393×695 iPhone,
+   * confirmed through /diag as backend webgpu at fxBudget level 2. The two
+   * acceptance criteria above are HIS to judge and have NOT been measured
+   * from the dev machine — the Browser pane does not composite while hidden,
+   * so nothing here can render this island, let alone time it. If the ring
+   * does not read like the desktop at 390px, or the section drops below
+   * ~50fps, this goes back to false: a one-character revert with no type
+   * ripple, and the CSS composite beat is still the fallback underneath.
+   */
+  LITE_RAYMARCH: true as boolean,
 } as const;
 
 /** Camera pan amplitude as a fraction of worldViewWidth (SignatureLine and
