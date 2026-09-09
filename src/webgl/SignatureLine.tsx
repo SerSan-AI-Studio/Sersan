@@ -1440,9 +1440,39 @@ export function SignatureLine({ tier, pathname, anchors }: SignatureLineProps) {
     //    second rotateX → no double-rotation wobble); nothing to do here.
     //  - lite / no-curve → no lookAt ran, so reset orientation and apply the
     //    single descent rotateX (this is the ONLY orientation writer there).
-    if ((tier !== "full" || !curve) && Math.abs(descendPitch.current) > 0.0001) {
+    //
+    // THE RE-BASE IS NOW UNCONDITIONAL ON THIS PATH (2026-09-09). It used to
+    // be gated on `descendPitch > 0.0001`, i.e. it only ran while the descent
+    // beat was live — which left the lite path with NO orientation base for
+    // the rest of the page, and `camera.rotateX` is RELATIVE. The intro head
+    // raise below rotates by `introLift × CAMERA_FOV` every frame and had no
+    // base of its own, so on a phone it ACCUMULATED: 0.02 × 50° = 1° per
+    // frame through the load hold (60°/s — a full revolution in the six
+    // seconds of the preloader), then 0.3 × 50° = 15° per frame across intro
+    // gate 2b. The camera tumbled, and the whole choreography — the wordmark
+    // forming, the climb out of the hole, the crust burst, the final pull
+    // back — played somewhere off the edge of the frame. Reported from the
+    // owner's iPhone as "il mondo gira su se stesso" (2026-09-09).
+    //
+    // The hazard is already documented VERBATIM a few lines below, for the
+    // warp terms: "on lite/no-curve nothing re-bases orientation, so an
+    // additive rotate would ACCUMULATE into a spin". Those are guarded by
+    // `warpOriented`; the intro lift never was, because when it was written
+    // the intro only ever ran on the full-tier path — the compact brand beat
+    // that brings it to a phone came later.
+    //
+    // Re-basing every frame gives the lite path the property the full-tier
+    // lookAt already has by construction: orientation is a pure function of
+    // THIS frame's inputs, never a running total. It also fixes the residual
+    // the old threshold left behind — when descendPitch decayed under 0.0001
+    // the reset simply stopped running and the camera kept its last pitch.
+    // One quaternion write per frame on a path that skips the whole lookAt
+    // block; desktop (`tier === "full" && curve`) does not enter here at all.
+    if (tier !== "full" || !curve) {
       camera.quaternion.set(0, 0, 0, 1);
-      camera.rotateX(-descendPitch.current);
+      if (Math.abs(descendPitch.current) > 0.0001) {
+        camera.rotateX(-descendPitch.current);
+      }
     }
 
     // === Round 3 §C1 — WARP CAMERA (home one-shot plunge; igloo grammar) ====
