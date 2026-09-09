@@ -255,6 +255,29 @@ const INTRO_BURST_AT_S = 4.2;
  * rigid-camera physics the owner asked for. Rides introZoomRef down to 0,
  * so the shipped lockup is exactly what the hero rests on. */
 const INTRO_MARK_RAISE = 0.13;
+/**
+ * The raise above, SCALED FOR THE FRAME'S SHAPE (2026-09-09).
+ *
+ * 0.13 was tuned on a 16:9 desktop and reads as a world-space offset, but
+ * what lands on screen is that offset MAGNIFIED by the intro dolly-in: at
+ * INTRO_CAM_IN 0.52 the camera sits at 48% of its rest distance, so both the
+ * mark's size AND its distance from frame centre are multiplied by ~2.08.
+ * On a phone (owner's iPhone: 393×695, aspect 0.57) the sums land off the
+ * top edge — mark centre 0.04 + 0.13 = 0.17 of the view height above centre,
+ * ×2.08 ≈ 35%, plus a half-height of ≈29% ⇒ a top edge ≈64% above centre,
+ * where the frame ends at 50%. The owner saw exactly that: "il logo troppo
+ * in alto", clipped by the status bar.
+ *
+ * A portrait frame cannot carry the spread a landscape one can, so the raise
+ * tapers with the aspect rather than being clamped at a breakpoint. The knee
+ * sits at 1.3 — every desktop and tablet aspect is at or above it and gets
+ * 0.13 UNCHANGED (a 16:9 window computes min(1, 1.37) = 1) — and the floor
+ * at 0.35 keeps some spread on the narrowest frames rather than collapsing
+ * the lockup into one mass.
+ */
+function introMarkRaise(aspect: number): number {
+  return INTRO_MARK_RAISE * Math.min(1, Math.max(0.35, aspect / 1.3));
+}
 /** Seconds (at the END of the reform clock) over which the dark occluder
  * body fades back in — kept late so the generation reads as particles
  * forming from nothing with the body filling in behind. */
@@ -1002,7 +1025,9 @@ export function HeroLogo({ tier, anchors }: HeroLogoProps) {
       // INTRO SPREAD (see INTRO_MARK_RAISE): the mark rides higher in space
       // while the camera is zoomed in, so the head raise frames it while the
       // rest of the scene sinks below. Exactly 0 once the intro lands.
-      WORLD_VIEW_HEIGHT * INTRO_MARK_RAISE * introZoomRef.current;
+      WORLD_VIEW_HEIGHT *
+        introMarkRaise(size.width / size.height) *
+        introZoomRef.current;
     group.position.set(
       heroX * flight,
       // HEAD RAISE (introCamShiftRef, rests at 0): the gaze lifts, so every

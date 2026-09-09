@@ -425,18 +425,25 @@ export const SEQ = {
    * `boolean` on purpose so the flip is a one-character change with no type
    * ripple; desktop (`tier full` ⇒ raymarchLite false) never consults it.
    *
-   * FLIPPED ON 2026-09-09 — the owner asked for the plunge hole on his phone
-   * ("manca il buco nero … nella sezione del viaggio a velocità della luce")
-   * and he IS the device gate this flag was waiting for: a 393×695 iPhone,
-   * confirmed through /diag as backend webgpu at fxBudget level 2. The two
-   * acceptance criteria above are HIS to judge and have NOT been measured
-   * from the dev machine — the Browser pane does not composite while hidden,
-   * so nothing here can render this island, let alone time it. If the ring
-   * does not read like the desktop at 390px, or the section drops below
-   * ~50fps, this goes back to false: a one-character revert with no type
-   * ripple, and the CSS composite beat is still the fallback underneath.
+   * THE DEVICE GATE RAN 2026-09-09 AND FAILED — back to false.
+   *
+   * Turned on that day at the owner's request ("manca il buco nero … nella
+   * sezione del viaggio a velocità della luce") because he is exactly the
+   * handset this flag was waiting for: a 393×695 iPhone, confirmed through
+   * /diag as backend webgpu at fxBudget level 2. He reported back within the
+   * hour — "da telefono il buco nero fa laggare la pagina". That is the
+   * ≥50fps criterion above, judged by the only instrument that can judge it,
+   * and the rule this flag ships with is explicit about what happens next:
+   * either criterion failing ⇒ false, and the CSS composite beat stays the
+   * phone path. So it does.
+   *
+   * The march is already at ITER_LO/STEP_LO under LITE_DPR_CAP 1, i.e. the
+   * cheap end of the knobs it has. Re-enabling wants a real profile of that
+   * section on a handset — which cannot be taken from the dev machine, since
+   * the Browser pane does not composite while hidden — not another guess at
+   * the iteration count.
    */
-  LITE_RAYMARCH: true as boolean,
+  LITE_RAYMARCH: false as boolean,
 } as const;
 
 /** Camera pan amplitude as a fraction of worldViewWidth (SignatureLine and

@@ -1384,11 +1384,28 @@ function CompactHeroBrand({ skipLabel }: { skipLabel: string }) {
         <span
           data-hero-brand
           data-hero-brand-compact
-          className="font-brand text-[9.69vw] leading-none tracking-[0.3em] text-ink inline-block whitespace-nowrap"
+          // 9.69vw → 7.2vw and translateY 16svh → 8svh (2026-09-09).
+          //
+          // BOTH numbers are consumed MAGNIFIED, which is what the originals
+          // missed. The particle system samples this span's rect and maps it
+          // to world at the z=0 plane — an exact mapping at CAMERA_Z, but the
+          // intro holds the camera at 48% of that distance (INTRO_CAM_IN
+          // 0.52), so during the entire preloader the wordmark renders ~2.08×
+          // its DOM size AND ~2.08× its offset below centre. At 393px that is
+          // a "SERSAN" wider than the screen, clipped on both edges, sitting
+          // 33svh down — on top of the percentage readout. The owner's
+          // screenshot: "la scritta Sersan è troppo in basso".
+          //
+          // 7.2vw ≈ 28px on that phone, so the magnified block lands near
+          // three quarters of the frame width instead of over it; 8svh puts
+          // it ~17svh below centre once magnified, which is under the mark
+          // and clear of the readout. Compact-only — the desktop stage
+          // renders its own span with its own clamp and is untouched.
+          className="font-brand text-[7.2vw] leading-none tracking-[0.3em] text-ink inline-block whitespace-nowrap"
           style={{
             fontWeight: 340,
             opacity: 0,
-            transform: "translateY(16svh)",
+            transform: "translateY(8svh)",
             willChange: "opacity",
           }}
         >
